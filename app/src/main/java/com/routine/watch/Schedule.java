@@ -111,6 +111,42 @@ public final class Schedule {
         return rows;
     }
 
+    /** Every recording (dated first, by date and time; then the ones without a date, oldest first). */
+    public static List<Item> recordings(Collection<Item> items) {
+        List<Item> out = new ArrayList<>();
+        for (Item it : items) if (it.isRecording()) out.add(it);
+        Collections.sort(out, new Comparator<Item>() {
+            @Override
+            public int compare(Item a, Item b) {
+                boolean da = recDate(a) != null, db = recDate(b) != null;
+                if (da != db) return da ? -1 : 1;
+                if (da) {
+                    int c = LocalDateTime.of(recDate(a), a.localTime()).compareTo(LocalDateTime.of(recDate(b), b.localTime()));
+                    if (c != 0) return c;
+                } else {
+                    int c = a.created.compareTo(b.created);
+                    if (c != 0) return c;
+                }
+                return a.title.compareToIgnoreCase(b.title);
+            }
+        });
+        return out;
+    }
+
+    /** "Today", "Tomorrow", "Mon 9 Nov". */
+    public static String fmtDay(LocalDate d, LocalDate today) {
+        if (d.equals(today)) return "Today";
+        if (d.equals(today.plusDays(1))) return "Tomorrow";
+        return d.getDayOfWeek().getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) + " " + d.getDayOfMonth() + " "
+                + d.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH);
+    }
+
+    /** One line for a recording: "Tomorrow - 5:30 PM" or "No date". */
+    public static String recWhen(Item it, LocalDate today) {
+        LocalDate d = recDate(it);
+        return d == null ? "No date" : fmtDay(d, today) + " - " + fmt12(it.localTime());
+    }
+
     /** The one item that comes next (tomorrow's first routine item if today is finished). */
     public static Row next(Collection<Item> items, LocalDateTime now) {
         Row best = null;

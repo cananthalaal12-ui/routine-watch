@@ -26,6 +26,12 @@
 
         <activity android:name=".SetupActivity" android:exported="false" />
 
+        <!-- editing the schedule / recordings from the watch (the keyboard must not hide the buttons) -->
+        <activity android:name=".EditItemActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity android:name=".EditRecActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
         <activity
             android:name=".AlertActivity"
             android:exported="false"

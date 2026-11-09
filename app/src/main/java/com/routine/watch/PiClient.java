@@ -28,6 +28,13 @@ public final class PiClient implements SyncEngine.Net {
         }
     }
 
+    /** The Pi refused an edit and says why (for example "There is already an item at 1:00 PM."). */
+    public static final class RejectedException extends IOException {
+        public RejectedException(String m) {
+            super(m);
+        }
+    }
+
     public static final class Found {
         public final String name, ip;
         public final int port;
@@ -55,7 +62,7 @@ public final class PiClient implements SyncEngine.Net {
         if (c != null) c.disconnect();
     }
 
-    private JSONObject request(String method, String path, int readTimeoutMs) throws IOException, JSONException {
+    private JSONObject request(String method, String path, int readTimeoutMs, String json) throws IOException, JSONException {
         HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + ":" + port + path).openConnection();
         current = c;
         try {
@@ -66,7 +73,8 @@ public final class PiClient implements SyncEngine.Net {
             c.setRequestProperty("X-Code", code);
             if ("POST".equals(method)) {
                 c.setDoOutput(true);
-                c.getOutputStream().write("{}".getBytes(StandardCharsets.UTF_8));
+                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                c.getOutputStream().write((json == null ? "{}" : json).getBytes(StandardCharsets.UTF_8));
             }
             int status = c.getResponseCode();
             InputStream in = status < 400 ? c.getInputStream() : c.getErrorStream();
@@ -78,6 +86,17 @@ public final class PiClient implements SyncEngine.Net {
                 } catch (JSONException ignored) {
                 }
                 throw new AuthException(msg);
+            }
+            if (status == 400 || status == 404 || status == 409) {          // an edit the Pi did not accept
+                String msg = "The Pi did not accept that.";
+                try {
+                    msg = new JSONObject(body).optString("error", msg);
+                } catch (JSONException ignored) {
+                }
+                if (status == 404 && path.startsWith("/edit") && msg.equals("Not found")) {
+                    msg = "The Pi has an old watch_api.py. Copy the new one to the Pi and restart the reminder app.";
+                }
+                throw new RejectedException(msg);
             }
             if (status != 200) throw new IOException("Pi answered " + status);
             return new JSONObject(body);
@@ -100,16 +119,21 @@ public final class PiClient implements SyncEngine.Net {
     public JSONObject sync(int since, String epoch, int n, String digest, int wait) throws IOException, JSONException {
         String q = "/sync?since=" + since + "&epoch=" + URLEncoder.encode(epoch, "UTF-8") + "&n=" + n
                 + "&digest=" + URLEncoder.encode(digest, "UTF-8") + "&wait=" + wait;
-        return request("GET", q, (wait + 8) * 1000);
+        return request("GET", q, (wait + 8) * 1000, null);
     }
 
     /** Ask the Pi to speak the daily briefing. The answer holds the text too. */
     public JSONObject brief() throws IOException, JSONException {
-        return request("POST", "/brief", 8000);
+        return request("POST", "/brief", 8000, null);
     }
 
     public JSONObject ping() throws IOException, JSONException {
-        return request("GET", "/ping", 6000);
+        return request("GET", "/ping", 6000, null);
+    }
+
+    /** Send one edit (see Edits). Throws RejectedException with the Pi's own words if it says no. */
+    public void edit(JSONObject payload) throws IOException, JSONException {
+        request("POST", "/edit", 10000, payload.toString());
     }
 
     /** Shout on the Wi-Fi "is there a Pi?" and collect the answers. */

@@ -18,6 +18,7 @@ import android.widget.Toast;
 import org.json.JSONObject;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /** The watch face of the app: clock, what is next, today's list, and a "Brief me" button. */
@@ -29,6 +30,7 @@ public class MainActivity extends Activity {
     private volatile boolean netBad = false;
     private TextView status, nextTitle, nextWhen;
     private LinearLayout list;
+    private String lastSig = "";                   // what the list was last built from (so it is not rebuilt for nothing)
 
     private final Runnable minuteTick = new Runnable() {
         @Override
@@ -235,8 +237,12 @@ public class MainActivity extends Activity {
             long mins = (System.currentTimeMillis() - d.lastOkMs) / 60000;
             s = mins < 1 ? "Up to date" : "Synced " + (mins < 60 ? mins + " min ago" : (mins / 60) + " h ago");
         }
-        status.setText(s);
+        status.setText(s + "   v" + version());
         status.setTextColor(netBad ? Ui.AMBER : Ui.MUTE);
+        // the rest is rebuilt only when something changed (or the minute changed): a rebuild in the middle of a tap would lose the tap
+        String sig = d.rev + "|" + d.items.size() + "|" + d.digest() + "|" + now.truncatedTo(ChronoUnit.MINUTES);
+        if (sig.equals(lastSig)) return;
+        lastSig = sig;
         // next
         Schedule.Row nx = Schedule.next(d.items.values(), now);
         if (nx == null) {
@@ -246,23 +252,84 @@ public class MainActivity extends Activity {
             nextTitle.setText(nx.item.title);
             nextWhen.setText(Schedule.fmt12(nx.when.toLocalTime()) + "   " + Schedule.when(nx.when, now));
         }
-        // list
+        // list: today's schedule (tap to edit, + Add for a new item), then all recordings (tap to edit)
         list.removeAllViews();
+        list.addView(todayHeader());
         List<Schedule.Row> today = Schedule.today(d.items.values(), now);
-        if (!today.isEmpty()) list.addView(header("TODAY"));
         for (Schedule.Row r : today) list.addView(row(r, now));
-        List<Schedule.Row> later = Schedule.later(d.items.values(), now);
-        if (!later.isEmpty()) list.addView(header("LATER"));
-        for (Schedule.Row r : later) list.addView(row(r, now));
+        if (today.isEmpty()) {
+            TextView none = Ui.label(this, d.items.isEmpty() ? "Nothing yet. Connect with Setup." : "Nothing today. Tap + Add.", 14, Ui.MUTE, false);
+            none.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), 0, Ui.dp(this, 4));
+            list.addView(none);
+        }
+        List<Item> recs = Schedule.recordings(d.items.values());
+        list.addView(header("RECORDINGS" + (recs.isEmpty() ? "" : "  (" + recs.size() + ")")));
+        for (Item r : recs) list.addView(recRow(r, now));
+        if (recs.isEmpty()) {
+            TextView none = Ui.label(this, "No recordings yet. Make them on the Pi.", 14, Ui.MUTE, false);
+            none.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), 0, Ui.dp(this, 4));
+            list.addView(none);
+        }
+    }
+
+    /** The app's version number (shown next to the status, so you can see which app is installed). */
+    private String version() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "?";
+        }
     }
 
     private TextView header(String s) {
         TextView t = Ui.label(this, s, 11, Ui.MUTE, true);
-        t.setPadding(Ui.dp(this, 2), Ui.dp(this, 10), 0, Ui.dp(this, 4));
+        t.setPadding(Ui.dp(this, 2), Ui.dp(this, 12), 0, Ui.dp(this, 4));
         return t;
     }
 
-    private View row(Schedule.Row r, LocalDateTime now) {
+    /** "TODAY ........ + Add" */
+    private View todayHeader() {
+        LinearLayout h = new LinearLayout(this);
+        h.setOrientation(LinearLayout.HORIZONTAL);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        h.setPadding(Ui.dp(this, 2), Ui.dp(this, 10), 0, Ui.dp(this, 4));
+        TextView t = Ui.label(this, "TODAY  -  tap to edit", 11, Ui.MUTE, true);
+        h.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        Button add = Ui.button(this, "+ Add", Ui.ACCENT, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, EditItemActivity.class));
+            }
+        });
+        add.setTextSize(13);
+        h.addView(add, new LinearLayout.LayoutParams(-2, Ui.dp(this, 40)));
+        return h;
+    }
+
+    private View recRow(final Item r, LocalDateTime now) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setBackground(Ui.round(Ui.CARD, 10, this));
+        int p = Ui.dp(this, 10);
+        row.setPadding(p, p, p, p);
+        TextView title = Ui.label(this, r.title, 16, r.played ? Ui.MUTE : Ui.TEXT, false);
+        String sub = Schedule.recWhen(r, now.toLocalDate()) + (r.played ? "   PLAYED" : r.date.isEmpty() ? "" : r.ring ? "   ALARM" : "");
+        TextView when = Ui.label(this, sub, 12, r.played ? Ui.MUTE : Ui.ACCENT, true);
+        row.addView(title);
+        row.addView(when);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = Ui.dp(this, 4);
+        row.setLayoutParams(lp);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, EditRecActivity.class).putExtra("id", r.id.substring(1)));
+            }
+        });
+        return row;
+    }
+
+    private View row(final Schedule.Row r, LocalDateTime now) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -282,6 +349,17 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.bottomMargin = Ui.dp(this, 4);
         row.setLayoutParams(lp);
+        row.setOnClickListener(new View.OnClickListener() {          // tap = edit this item
+            @Override
+            public void onClick(View v) {
+                if (r.item.isRecording()) {
+                    startActivity(new Intent(MainActivity.this, EditRecActivity.class).putExtra("id", r.item.id.substring(1)));
+                } else {
+                    startActivity(new Intent(MainActivity.this, EditItemActivity.class)
+                            .putExtra("old", r.item.time).putExtra("title", r.item.title));
+                }
+            }
+        });
         return row;
     }
 

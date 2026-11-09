@@ -14,7 +14,7 @@ import android.widget.TextView;
 
 import java.util.List;
 
-/** Connect to the Pi: "Find Pi" (or type its address), type the 6-digit code from the Pi's home screen, Connect. */
+/** Connect to the Pi: "Find Pi" (or type its address), type the 6-digit code from the Pi (Study lock > Settings > Watch code), Connect. */
 public class SetupActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private TextView addrBox, codeBox, msg;
@@ -39,7 +39,7 @@ public class SetupActivity extends Activity {
         sv.addView(root);
 
         root.addView(Ui.label(this, "Connect to the Pi", 22, Ui.TEXT, true));
-        TextView how = Ui.label(this, "1. Be on the home Wi-Fi.   2. Tap Find Pi.   3. Type the code shown on the Pi's home screen.   4. Connect.", 12, Ui.MUTE, false);
+        TextView how = Ui.label(this, "1. Be on the home Wi-Fi.   2. Tap Find Pi.   3. Type the code on the Pi: Study lock > Settings > Watch code.   4. Connect.", 12, Ui.MUTE, false);
         how.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 8));
         root.addView(how);
 
@@ -187,7 +187,7 @@ public class SetupActivity extends Activity {
         }
         if (c.length() != 6) {
             msg.setTextColor(Ui.AMBER);
-            msg.setText("The code has 6 digits. It is on the Pi's home screen (or run: python3 watch_api.py --info).");
+            msg.setText("The code has 6 digits. It is on the Pi: Study lock > Settings > Watch code.");
             return;
         }
         msg.setTextColor(Ui.MUTE);
@@ -209,7 +209,7 @@ public class SetupActivity extends Activity {
                     Alarms.scheduleNext(app);
                     Alarms.scheduleSync(app);
                 } catch (PiClient.AuthException e) {
-                    err = "Wrong code. Look at the code on the Pi's home screen.";
+                    err = "Wrong code. Look at the code on the Pi: Study lock > Settings > Watch code.";
                 } catch (Exception e) {
                     err = "Could not reach the Pi. Same Wi-Fi? Is the Pi app running?";
                 }
