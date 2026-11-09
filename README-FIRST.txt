@@ -62,6 +62,37 @@ PART 4 - FIRST CONNECTION
   New code (e.g. to cut off a lost watch): on the Pi run   python3 watch_api.py --newcode   then restart the reminder app.
   The home page shows the new code again; connect the watch again with it.
 
+EDITING FROM THE WATCH  (version 1.1)
+  On the watch's main screen:
+    TODAY list      tap an item to change it. "+ Add" (top right of the list) makes a new routine item.
+    RECORDINGS list every recording from the Pi (with date/time, ALARM / PLAYED), below the schedule. Tap one to change it.
+  Routine item screen:  type the name (or tap a quick name like "eating", "study" - no typing needed), set the time with
+    the Hour -/+ , AM/PM and minute buttons (-5 -1 +1 +5), Save. Delete = tap twice ("Sure?").
+  Recording screen:     change the name, the day (-7d -1d +1d +7d, Today, Tomorrow, or "No date"), the time, and whether
+    the alarm beep plays first. Delete = tap twice; it also deletes the sound file on the Pi.
+    If you move a recording to a new date/time it will play again then. The recording's SOUND stays on the Pi
+    (the watch cannot record or play it; make and play recordings on the Pi).
+  How it works: the watch sends the change to the Pi. The Pi checks it and saves it (same files the Pi screen uses, so
+  the Pi screen shows it at once and the new routine name is prepared for speaking), then sends the change back to the
+  watch - only that one change, like every other sync. The Pi says no, in words, if you try something wrong
+  (for example two items at the same time, an empty name, an impossible date).
+  Editing needs the home Wi-Fi and the Pi running. Away from home the watch still shows the list and still rings, but
+  it says "The Pi is not reachable" if you try to save.
+
+UPDATING FROM VERSION 1.0 TO 1.1  (you already have 1.0 working)
+  1. Pi: replace watch_api.py with the new one, then restart the reminder app. (The old watch app keeps working
+     with the new Pi file, so you can do this step first.)
+  2. GitHub: open your routine-watch repository > Add file > Upload files. Unzip routine-watch-android.zip, open the
+     routine-watch folder, select everything inside it and drag it in (the same as the first time; same-named files are
+     replaced). Commit changes. The build starts by itself (Actions tab, about 5 minutes). Download the new
+     routine-watch-apk and unzip it to get app-debug.apk. (The .github folder is already there from last time.)
+  3. Watch: this ONE time, uninstall the old Routine app first (Settings > Apps > Routine > Uninstall), because the old
+     APK was signed with a different random key. Then install the new APK the same way as before.
+     From now on the project has a fixed key, so later updates install OVER the old app (no uninstall, nothing lost).
+  4. Open Routine > Setup > Find Pi > code > Connect (the watch forgets the Pi when the app is uninstalled).
+     The Pi's home page shows the code if no watch has connected; or run  python3 watch_api.py --info  .
+     The key in the project is only a "debug" key for installing your own app on your own watch.
+
 IF SOMETHING GOES WRONG
   "Pi not reachable"      watch not on the home Wi-Fi, or the reminder app is not running. The saved schedule still works.
   "Wrong code"            look at the code on the Pi's home page (or run  python3 watch_api.py --info ); Setup again.
@@ -70,15 +101,15 @@ IF SOMETHING GOES WRONG
   On the Pi:              python3 watch_api.py --info     prints the address and the code.
 
 HONEST LIMITS
-  * Tested here: the Pi side (28 checks) and the sync logic of the Android app against the real Pi code (28 checks:
+  * Tested here: the Pi side (56 checks, including every edit and every refusal) and the sync logic of the Android app against the real Pi code (46 checks:
     first full copy, changes only, deletes, missed changes, repair, long wait, wrong code, auto-find, the clock rules),
-    and the whole Android code compiles against Android 8.1. NOT tested: the screens, the vibration/beeps/voice and the
-    alarms on a real watch, and the APK build itself (it happens on GitHub / your PC). The first install is the real test -
-    tell me exactly what you see and I will fix it.
+    and the whole Android code compiles against Android 8.1. NOT tested: the new edit screens (buttons, keyboard, layout)
+    on a real watch, and the APK build itself (it happens on GitHub). Version 1.0's screens and alarms you confirmed
+    working. The first use of the edit screens is the real test - tell me exactly what you see and I will fix it.
   * Away from home (4G only) the watch cannot reach the Pi; it keeps ringing from its saved copy. Remote access
     (e.g. Tailscale) can be added later if you want it.
-  * The watch only READS the schedule from the Pi (you edit on the Pi). Editing on the watch, and playing recordings
-    on the watch, are not in this first version.
+  * You can edit the schedule and recordings from the watch (see EDITING FROM THE WATCH). The watch cannot record
+    new sounds or play recordings; do those on the Pi.
   * The link is plain HTTP on your home Wi-Fi protected by the 6-digit code: fine for a home network, not for public Wi-Fi.
   * The voice on the watch ("It is lunch time") works only if the watch has a text-to-speech voice installed; beeps and
     vibration work either way.
