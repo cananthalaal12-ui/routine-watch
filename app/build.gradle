@@ -1,0 +1,27 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.routine.watch'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.routine.watch'
+        minSdk 26          // Android 8.0 and newer (the Fire-Boltt Dream is Android 8.1)
+        targetSdk 27       // behaves like Android 8.1, the watch's own version
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
