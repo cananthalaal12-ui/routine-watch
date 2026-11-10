@@ -1,20 +1,20 @@
-START HERE  -  Routine reminder + Watch app, version 1.2  (Pi and watch must both be 1.2)
+START HERE  -  Routine reminder + Watch app, version 1.3  (Pi and watch must both be 1.3)
 ==========================================================================================
 You get TWO zip files. Use each completely, as a whole. Do not mix them with older files.
 
-  1) PI-complete-v1.2.zip          everything for the Raspberry Pi (replaces ALL the old Python files)
-  2) WATCH-android-complete-v1.2.zip   the complete Android project for the watch
+  1) PI-complete-v1.3.zip          everything for the Raspberry Pi (replaces ALL the old Python files)
+  2) WATCH-android-complete-v1.3.zip   the complete Android project for the watch
 
 A. THE PI
-   1. Unzip PI-complete-v1.2.zip. Copy ALL the files inside the routine-reminder folder into your routine-reminder
+   1. Unzip PI-complete-v1.3.zip. Copy ALL the files inside the routine-reminder folder into your routine-reminder
       folder on the Pi and say "Replace" for every file. (Your own schedule.json and recordings are NOT in the zip,
       so they are not touched.)
    2. Restart the reminder app (or reboot the Pi).
    3. Check: Study lock > Settings > "Watch code". It shows the 6-digit code, the Pi address and
-      "watch link v1.2". If it does not say v1.2, the old files are still there - copy again.
+      "watch link v1.3". If it does not say v1.3, the old files are still there - copy again.
 
 B. THE WATCH APP  (GitHub builds the APK)
-   1. Unzip WATCH-android-complete-v1.2.zip. You get a folder  routine-watch .
+   1. Unzip WATCH-android-complete-v1.3.zip. You get a folder  routine-watch .
    2. On github.com open your repository  routine-watch . Click  Add file > Upload files .
    3. Open the routine-watch folder on your PC, press Ctrl+A, drag EVERYTHING into the browser. Wait until the list
       finishes. Click  Commit changes .
@@ -22,13 +22,15 @@ B. THE WATCH APP  (GitHub builds the APK)
       EditItemActivity.java, EditRecActivity.java, Pickers.java, Edits.java.   (If not: upload the "app" folder again.)
    5. Actions tab > the NEWEST run (top of the list, named "Add files via upload") > wait for the green tick >
       Artifacts > routine-watch-apk. Unzip it: app-debug.apk.
-   6. On the watch: Settings > Apps > Routine > UNINSTALL the old app first (always do this once, the key changed).
-   7. Install the new app-debug.apk on the watch (Bluetooth / Pi download / adb - see WATCH-APP.txt).
-   8. Open Routine. At the top it must say  "...   v1.2" . If it says v1.0 or v1.1, the OLD app is still installed.
-   9. Setup > Find Pi > type the code from the Pi (Study lock > Settings > Watch code) > Connect.
+   6. On the watch: you already have version 1.2, so you do NOT need to uninstall. Just install the new app-debug.apk
+      over it (same way as before). Your Pi connection is kept. (Only if you have 1.1 or older: uninstall once first.)
+   7. If the install says it cannot install: uninstall the old Routine app, then install the new one.
+   8. Open Routine. At the top it must say  "...   v1.3" . If it says v1.2 or older, the OLD app is still installed.
+   9. (Only needed if the watch lost the connection) Setup > Find Pi > type the code from the Pi (Study lock > Settings > Watch code) > Connect.
 
 C. HOW TO SEE THAT EDITING WORKS
    * Main screen: right of "TODAY - tap to edit" there is a blue  + Add  button, and below the schedule a  RECORDINGS  list.
+   * Tap a RECORDING row -> it PLAYS on the watch (tap again to stop). The small  Edit  button on its right opens the recording editor.
    * Tap a schedule line -> the editor opens (name, quick names, hour/minute buttons, Save, Delete).
    * Tap Save -> after a second the editor closes and the change is in the list AND on the Pi screen.
    * If you see a message instead, it explains the problem in words (e.g. "The Pi has an old watch_api.py ...").

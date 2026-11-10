@@ -32,7 +32,7 @@ PART 2 - MAKE THE APK (I cannot make it for you: the Android build tools are blo
   Folder: routine-watch/   (everything needed is inside; no extra downloads from you)
   ROUTE A - GitHub builds it for you (free, no software to install):
      1. Make a free account at github.com and click  +  >  New repository.  Name: routine-watch. Private is fine.
-     2. On the new repository page click "uploading an existing file". Unzip WATCH-android-complete-v1.2.zip on your PC,
+     2. On the new repository page click "uploading an existing file". Unzip WATCH-android-complete-v1.3.zip on your PC,
         open the routine-watch folder, select EVERYTHING inside it (including the .github folder) and drag it into the
         browser. Click "Commit changes".
      3. Click the "Actions" tab. A run called "Build the watch APK" starts by itself (about 5 minutes; green tick = done).
@@ -65,10 +65,14 @@ PART 4 - FIRST CONNECTION
   The old code stops working at once and the watch is disconnected until you type the new code on it.
   (Without the screen you can also run  python3 watch_api.py --newcode  or  --setcode 123456 .)
 
-EDITING FROM THE WATCH  (version 1.2)
+EDITING FROM THE WATCH  (version 1.3)
   On the watch's main screen:
     TODAY list      tap an item to change it. "+ Add" (top right of the list) makes a new routine item.
     RECORDINGS list every recording from the Pi (with date/time, ALARM / PLAYED), below the schedule. Tap one to change it.
+  PLAYING A RECORDING: tap a recording's row in the RECORDINGS list and the WATCH plays it (the sound comes from the
+    Pi over Wi-Fi; the row says "Loading ..." then "Playing ... tap to stop"). Tap again to stop. The small
+    "Edit" button on the right of every recording row opens the recording editor. The watch must be on the home
+    Wi-Fi with the Pi running. A recording shown in the TODAY list also plays when tapped (edit it from RECORDINGS).
   Routine item screen:  type the name (or tap a quick name like "eating", "study" - no typing needed), set the time with
     the Hour -/+ , AM/PM and minute buttons (-5 -1 +1 +5), Save. Delete = tap twice ("Sure?").
   Recording screen:     change the name, the day (-7d -1d +1d +7d, Today, Tomorrow, or "No date"), the time, and whether
@@ -82,10 +86,10 @@ EDITING FROM THE WATCH  (version 1.2)
   Editing needs the home Wi-Fi and the Pi running. Away from home the watch still shows the list and still rings, but
   it says "The Pi is not reachable" if you try to save.
 
-UPDATING FROM AN OLDER VERSION TO 1.2  (see also START-HERE.txt)
-  1. Pi: copy ALL files from PI-complete-v1.2.zip (at least watch_api.py, reminder_app.py, lock_screen.py), then restart the reminder app. (The old watch app keeps working
+UPDATING FROM AN OLDER VERSION TO 1.3  (see also START-HERE.txt)
+  1. Pi: copy ALL files from PI-complete-v1.3.zip (at least watch_api.py, reminder_app.py, lock_screen.py), then restart the reminder app. (The old watch app keeps working
      with the new Pi file, so you can do this step first.)
-  2. GitHub: open your routine-watch repository > Add file > Upload files. Unzip WATCH-android-complete-v1.2.zip, open the
+  2. GitHub: open your routine-watch repository > Add file > Upload files. Unzip WATCH-android-complete-v1.3.zip, open the
      routine-watch folder, select everything inside it and drag it in (the same as the first time; same-named files are
      replaced). Commit changes. The build starts by itself (Actions tab, about 5 minutes). Download the new
      routine-watch-apk and unzip it to get app-debug.apk. (The .github folder is already there from last time.)

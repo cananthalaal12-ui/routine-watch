@@ -3,6 +3,8 @@ package com.routine.watch;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,6 +20,7 @@ import android.widget.Toast;
 import org.json.JSONObject;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /** The watch face of the app: clock, what is next, today's list, and a "Brief me" button. */
@@ -29,6 +32,12 @@ public class MainActivity extends Activity {
     private volatile boolean netBad = false;
     private TextView status, nextTitle, nextWhen;
     private LinearLayout list;
+    private MediaPlayer player;                      // plays a recording on the watch
+    private String playingId = "";                   // which recording is loading / playing ("" = none)
+    private TextView playingLabel;                   // its "when" line, to show Playing ...
+    private int playColor = Ui.ACCENT;               // the colour that line had before "Playing"
+    private int playGen = 0;                         // changes on every tap, so an old download cannot start late
+    private String lastSig = "";                   // what the list was last built from (so it is not rebuilt for nothing)
 
     private final Runnable minuteTick = new Runnable() {
         @Override
@@ -140,6 +149,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        stopSound();
         gen++;
         PiClient c = client;
         if (c != null) c.abort();
@@ -235,8 +245,12 @@ public class MainActivity extends Activity {
             long mins = (System.currentTimeMillis() - d.lastOkMs) / 60000;
             s = mins < 1 ? "Up to date" : "Synced " + (mins < 60 ? mins + " min ago" : (mins / 60) + " h ago");
         }
-        status.setText(s);
+        status.setText(s + "   v" + version());
         status.setTextColor(netBad ? Ui.AMBER : Ui.MUTE);
+        // the rest is rebuilt only when something changed (or the minute changed): a rebuild in the middle of a tap would lose the tap
+        String sig = d.rev + "|" + d.items.size() + "|" + d.digest() + "|" + now.truncatedTo(ChronoUnit.MINUTES);
+        if (sig.equals(lastSig)) return;
+        lastSig = sig;
         // next
         Schedule.Row nx = Schedule.next(d.items.values(), now);
         if (nx == null) {
@@ -246,7 +260,7 @@ public class MainActivity extends Activity {
             nextTitle.setText(nx.item.title);
             nextWhen.setText(Schedule.fmt12(nx.when.toLocalTime()) + "   " + Schedule.when(nx.when, now));
         }
-        // list: today's schedule (tap to edit, + Add for a new item), then all recordings (tap to edit)
+        // list: today's schedule (tap to edit, + Add for a new item), then all recordings (tap = play, Edit button = change)
         list.removeAllViews();
         list.addView(todayHeader());
         List<Schedule.Row> today = Schedule.today(d.items.values(), now);
@@ -263,6 +277,15 @@ public class MainActivity extends Activity {
             TextView none = Ui.label(this, "No recordings yet. Make them on the Pi.", 14, Ui.MUTE, false);
             none.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), 0, Ui.dp(this, 4));
             list.addView(none);
+        }
+    }
+
+    /** The app's version number (shown next to the status, so you can see which app is installed). */
+    private String version() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "?";
         }
     }
 
@@ -293,25 +316,144 @@ public class MainActivity extends Activity {
 
     private View recRow(final Item r, LocalDateTime now) {
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
         row.setBackground(Ui.round(Ui.CARD, 10, this));
         int p = Ui.dp(this, 10);
         row.setPadding(p, p, p, p);
-        TextView title = Ui.label(this, r.title, 16, r.played ? Ui.MUTE : Ui.TEXT, false);
-        String sub = Schedule.recWhen(r, now.toLocalDate()) + (r.played ? "   PLAYED" : r.date.isEmpty() ? "" : r.ring ? "   ALARM" : "");
-        TextView when = Ui.label(this, sub, 12, r.played ? Ui.MUTE : Ui.ACCENT, true);
-        row.addView(title);
-        row.addView(when);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.bottomMargin = Ui.dp(this, 4);
-        row.setLayoutParams(lp);
-        row.setOnClickListener(new View.OnClickListener() {
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
+        TextView title = Ui.label(this, "\u25B6  " + r.title, 16, r.played ? Ui.MUTE : Ui.TEXT, false);
+        final String sub = Schedule.recWhen(r, now.toLocalDate()) + (r.played ? "   PLAYED" : r.date.isEmpty() ? "" : r.ring ? "   ALARM" : "");
+        final TextView when = Ui.label(this, sub, 12, r.played ? Ui.MUTE : Ui.ACCENT, true);
+        if (r.id.equals(playingId)) {
+            when.setText("Playing ... tap to stop");
+            when.setTextColor(Ui.GREEN);
+            when.setTag(sub);
+            playColor = r.played ? Ui.MUTE : Ui.ACCENT;
+            playingLabel = when;
+        }
+        text.addView(title);
+        text.addView(when);
+        row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+        Button edit = Ui.button(this, "Edit", Ui.BTN, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, EditRecActivity.class).putExtra("id", r.id.substring(1)));
             }
         });
+        edit.setTextSize(13);
+        edit.setMinWidth(0);
+        edit.setMinimumWidth(0);
+        edit.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 12), 0);
+        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(-2, Ui.dp(this, 44));
+        elp.leftMargin = Ui.dp(this, 8);
+        row.addView(edit, elp);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = Ui.dp(this, 4);
+        row.setLayoutParams(lp);
+        row.setOnClickListener(new View.OnClickListener() {          // tap the row = play it (tap again = stop)
+            @Override
+            public void onClick(View v) {
+                if (r.id.equals(playingId)) {
+                    stopSound();
+                } else {
+                    playSound(r, when, sub);
+                }
+            }
+        });
         return row;
+    }
+
+    // ------------------------------------------------------------------ playing a recording on the watch
+    private void stopSound() {
+        playGen++;
+        MediaPlayer m = player;
+        player = null;
+        if (m != null) {
+            try {
+                m.stop();
+            } catch (Exception ignored) {
+            }
+            m.release();
+        }
+        playingId = "";
+        TextView l = playingLabel;
+        playingLabel = null;
+        if (l != null) {
+            l.setText(l.getTag() instanceof String ? (String) l.getTag() : "");
+            l.setTextColor(playColor);
+        }
+    }
+
+    private void playSound(final Item r, final TextView when, final String normalText) {
+        if (!Store.isConfigured(this)) {
+            startActivity(new Intent(this, SetupActivity.class));
+            return;
+        }
+        stopSound();                                       // one at a time
+        final int my = ++playGen;
+        playingId = r.id;
+        playingLabel = when;
+        when.setTag(normalText);
+        playColor = when.getCurrentTextColor();
+        when.setText("Loading the sound ...");
+        when.setTextColor(Ui.AMBER);
+        final PiClient pc = Store.client(this);
+        final java.io.File f = new java.io.File(getCacheDir(), "rec_" + r.id + ".snd");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String err = null;
+                try {
+                    pc.downloadSound(r.id.substring(1), f);
+                } catch (Exception e) {
+                    err = e instanceof PiClient.AuthException ? "Wrong code. Tap Setup."
+                            : e instanceof PiClient.RejectedException ? e.getMessage() : "The Pi is not reachable right now.";
+                }
+                final String e = err;
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (my != playGen || isFinishing()) return;        // tapped something else meanwhile
+                        if (e != null) {
+                            stopSound();
+                            Toast.makeText(MainActivity.this, e, Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        try {
+                            MediaPlayer m = new MediaPlayer();
+                            player = m;
+                            m.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                            m.setDataSource(f.getPath());
+                            m.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                                @Override
+                                public void onCompletion(MediaPlayer mp) {
+                                    if (my == playGen) stopSound();
+                                }
+                            });
+                            m.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                                @Override
+                                public boolean onError(MediaPlayer mp, int what, int extra) {
+                                    if (my == playGen) {
+                                        stopSound();
+                                        Toast.makeText(MainActivity.this, "The watch could not play this sound.", Toast.LENGTH_LONG).show();
+                                    }
+                                    return true;
+                                }
+                            });
+                            m.prepare();
+                            when.setText("Playing ... tap to stop");
+                            when.setTextColor(Ui.GREEN);
+                            m.start();
+                        } catch (Exception ex) {
+                            stopSound();
+                            Toast.makeText(MainActivity.this, "The watch could not play this sound.", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+            }
+        }, "play").start();
     }
 
     private View row(final Schedule.Row r, LocalDateTime now) {
@@ -328,6 +470,7 @@ public class MainActivity extends Activity {
                 + r.item.title, 16, color, false);
         TextView tag = Ui.label(this, r.status.equals("now") ? "NOW" : r.status.equals("done") ? "DONE" : r.status.equals("next") ? "" : "", 11,
                 r.status.equals("now") ? Ui.GREEN : Ui.MUTE, true);
+        final TextView tagView = tag;
         row.addView(time);
         row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         row.addView(tag);
@@ -337,8 +480,9 @@ public class MainActivity extends Activity {
         row.setOnClickListener(new View.OnClickListener() {          // tap = edit this item
             @Override
             public void onClick(View v) {
-                if (r.item.isRecording()) {
-                    startActivity(new Intent(MainActivity.this, EditRecActivity.class).putExtra("id", r.item.id.substring(1)));
+                if (r.item.isRecording()) {                // a recording in today's list: tap = play it (Edit is in the RECORDINGS list)
+                    if (r.item.id.equals(playingId)) stopSound();
+                    else playSound(r.item, tagView, tagView.getText().toString());
                 } else {
                     startActivity(new Intent(MainActivity.this, EditItemActivity.class)
                             .putExtra("old", r.item.time).putExtra("title", r.item.title));
