@@ -136,6 +136,49 @@ public final class PiClient implements SyncEngine.Net {
         request("POST", "/edit", 10000, payload.toString());
     }
 
+    /** Download the sound of recording [id] (e.g. "r1") into [dest]. Throws RejectedException in words if it cannot. */
+    public void downloadSound(String id, java.io.File dest) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + ":" + port + "/audio?id=" + URLEncoder.encode(id, "UTF-8")).openConnection();
+        current = c;
+        try {
+            c.setConnectTimeout(4000);
+            c.setReadTimeout(15000);
+            c.setUseCaches(false);
+            c.setRequestProperty("X-Code", code);
+            int status = c.getResponseCode();
+            if (status != 200) {
+                InputStream err = status < 400 ? c.getInputStream() : c.getErrorStream();
+                String body = err == null ? "" : read(err);
+                String msg = "";
+                try {
+                    msg = new JSONObject(body).optString("error", "");
+                } catch (JSONException ignored) {
+                }
+                if (status == 401 || status == 429) throw new AuthException(msg.isEmpty() ? "Wrong code" : msg);
+                if (status == 404 && (msg.isEmpty() || msg.equals("Not found"))) {
+                    throw new RejectedException("The Pi has an old watch_api.py. Copy the new one to the Pi and restart the reminder app.");
+                }
+                throw new RejectedException(msg.isEmpty() ? "The Pi answered " + status : msg);
+            }
+            java.io.File tmp = new java.io.File(dest.getPath() + ".part");
+            InputStream in = c.getInputStream();
+            java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+            try {
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            } finally {
+                out.close();
+                in.close();
+            }
+            if (dest.exists()) dest.delete();
+            if (!tmp.renameTo(dest)) throw new IOException("Could not save the sound");
+        } finally {
+            current = null;
+            c.disconnect();
+        }
+    }
+
     /** Shout on the Wi-Fi "is there a Pi?" and collect the answers. */
     public static List<Found> discover(int timeoutMs) {
         try {
