@@ -10,8 +10,8 @@ android {
         applicationId 'com.routine.watch'
         minSdk 26          // Android 8.0 and newer (the Fire-Boltt Dream is Android 8.1)
         targetSdk 27       // behaves like Android 8.1, the watch's own version
-        versionCode 3
-        versionName '1.2'
+        versionCode 4
+        versionName '1.3'
     }
 
     // one fixed key, so a new APK installs OVER the old one (GitHub would otherwise make a new random key every build)
