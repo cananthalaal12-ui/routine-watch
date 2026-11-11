@@ -248,11 +248,14 @@ public class MainActivity extends Activity {
         status.setText(s + "   v" + version());
         status.setTextColor(netBad ? Ui.AMBER : Ui.MUTE);
         // the rest is rebuilt only when something changed (or the minute changed): a rebuild in the middle of a tap would lose the tap
-        String sig = d.rev + "|" + d.items.size() + "|" + d.digest() + "|" + now.truncatedTo(ChronoUnit.MINUTES);
+        String sig = d.rev + "|" + d.items.size() + "|" + d.digest() + "|" + now.truncatedTo(ChronoUnit.MINUTES) + "|" + Pending.sig(this);
         if (sig.equals(lastSig)) return;
         lastSig = sig;
+        final java.util.List<Item> waiting = Pending.asItems(this);          // recordings made on the watch, not on the Pi yet
+        java.util.List<Item> all = new java.util.ArrayList<>(d.items.values());
+        all.addAll(waiting);
         // next
-        Schedule.Row nx = Schedule.next(d.items.values(), now);
+        Schedule.Row nx = Schedule.next(all, now);
         if (nx == null) {
             nextTitle.setText(d.items.isEmpty() ? "Nothing yet" : "Nothing planned");
             nextWhen.setText(d.items.isEmpty() ? "Tap Sync after connecting" : "");
@@ -263,7 +266,7 @@ public class MainActivity extends Activity {
         // list: today's schedule (tap to edit, + Add for a new item), then all recordings (tap = play, Edit button = change)
         list.removeAllViews();
         list.addView(todayHeader());
-        List<Schedule.Row> today = Schedule.today(d.items.values(), now);
+        List<Schedule.Row> today = Schedule.today(all, now);
         for (Schedule.Row r : today) list.addView(row(r, now));
         if (today.isEmpty()) {
             TextView none = Ui.label(this, d.items.isEmpty() ? "Nothing yet. Connect with Setup." : "Nothing today. Tap + Add.", 14, Ui.MUTE, false);
@@ -271,9 +274,10 @@ public class MainActivity extends Activity {
             list.addView(none);
         }
         List<Item> recs = Schedule.recordings(d.items.values());
-        list.addView(recHeader(recs.size()));
+        list.addView(recHeader(recs.size() + waiting.size()));
+        for (Item r : Schedule.recordings(waiting)) list.addView(recRow(r, now));        // the ones still waiting for the Pi come first
         for (Item r : recs) list.addView(recRow(r, now));
-        if (recs.isEmpty()) {
+        if (recs.isEmpty() && waiting.isEmpty()) {
             TextView none = Ui.label(this, "No recordings yet. Tap Record to make one.", 14, Ui.MUTE, false);
             none.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), 0, Ui.dp(this, 4));
             list.addView(none);
@@ -343,22 +347,29 @@ public class MainActivity extends Activity {
         LinearLayout text = new LinearLayout(this);
         text.setOrientation(LinearLayout.VERTICAL);
         TextView title = Ui.label(this, "\u25B6  " + r.title, 16, r.played ? Ui.MUTE : Ui.TEXT, false);
-        final String sub = Schedule.recWhen(r, now.toLocalDate()) + (r.played ? "   PLAYED" : r.date.isEmpty() ? "" : r.ring ? "   ALARM" : "");
-        final TextView when = Ui.label(this, sub, 12, r.played ? Ui.MUTE : Ui.ACCENT, true);
+        final boolean waitingForPi = r.id.startsWith("p");
+        final Pending.Entry pe = waitingForPi ? Pending.get(this, r.id.substring(1)) : null;
+        final String sub = Schedule.recWhen(r, now.toLocalDate()) + (waitingForPi ? "   WAITING FOR PI" : r.played ? "   PLAYED" : r.date.isEmpty() ? "" : r.ring ? "   ALARM" : "");
+        final TextView when = Ui.label(this, sub, 12, waitingForPi ? Ui.AMBER : r.played ? Ui.MUTE : Ui.ACCENT, true);
         if (r.id.equals(playingId)) {
             when.setText("Playing ... tap to stop");
             when.setTextColor(Ui.GREEN);
             when.setTag(sub);
-            playColor = r.played ? Ui.MUTE : Ui.ACCENT;
+            playColor = waitingForPi ? Ui.AMBER : r.played ? Ui.MUTE : Ui.ACCENT;
             playingLabel = when;
         }
         text.addView(title);
         text.addView(when);
+        if (pe != null && !pe.error.isEmpty()) {                    // the Pi said no to this one: show why
+            TextView er = Ui.label(this, "The Pi said: " + pe.error, 11, Ui.RED, false);
+            text.addView(er);
+        }
         row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
         Button edit = Ui.button(this, "Edit", Ui.BTN, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, EditRecActivity.class).putExtra("id", r.id.substring(1)));
+                startActivity(new Intent(MainActivity.this, EditRecActivity.class)
+                        .putExtra(waitingForPi ? "lid" : "id", r.id.substring(1)));
             }
         });
         edit.setTextSize(13);
@@ -406,7 +417,7 @@ public class MainActivity extends Activity {
     }
 
     private void playSound(final Item r, final TextView when, final String normalText) {
-        if (!Store.isConfigured(this)) {
+        if (!r.id.startsWith("p") && !Store.isConfigured(this)) {
             startActivity(new Intent(this, SetupActivity.class));
             return;
         }
@@ -418,14 +429,19 @@ public class MainActivity extends Activity {
         playColor = when.getCurrentTextColor();
         when.setText("Loading the sound ...");
         when.setTextColor(Ui.AMBER);
+        final boolean local = r.id.startsWith("p");                 // made on the watch, not on the Pi yet: play the watch's own file
         final PiClient pc = Store.client(this);
-        final java.io.File f = new java.io.File(getCacheDir(), "rec_" + r.id + ".snd");
+        final java.io.File f = local ? Pending.file(this, r.id.substring(1)) : new java.io.File(getCacheDir(), "rec_" + r.id + ".snd");
         new Thread(new Runnable() {
             @Override
             public void run() {
                 String err = null;
                 try {
-                    pc.downloadSound(r.id.substring(1), f);
+                    if (local) {
+                        if (!f.isFile()) throw new PiClient.RejectedException("That recording is no longer on the watch.");
+                    } else {
+                        pc.downloadSound(r.id.substring(1), f);
+                    }
                 } catch (Exception e) {
                     err = e instanceof PiClient.AuthException ? "Wrong code. Tap Setup."
                             : e instanceof PiClient.RejectedException ? e.getMessage() : "The Pi is not reachable right now.";

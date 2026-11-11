@@ -10,6 +10,7 @@ import java.io.IOException;
 public final class Sync {
     public static SyncEngine.Result once(Context c, PiClient pi, int wait) throws IOException, JSONException {
         Context app = c.getApplicationContext();
+        if (Pending.count(app) > 0) Pending.flush(app, pi);     // recordings made while the Pi was away go over first
         Data d = Store.load(app);
         SyncEngine.Result r = SyncEngine.sync(d, pi, wait);
         long now = System.currentTimeMillis();

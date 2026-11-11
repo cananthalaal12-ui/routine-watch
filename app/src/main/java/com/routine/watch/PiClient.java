@@ -194,12 +194,17 @@ public final class PiClient implements SyncEngine.Net {
      * date == null = no date (then time is ignored). Throws RejectedException with the Pi's own words if it says no.
      */
     public void uploadRecording(java.io.File wav, String title, String date, String time, boolean ring) throws IOException, JSONException {
+        uploadRecording(wav, title, date, time, ring, "");
+    }
+
+    /** Same, with an id of the watch's own: if the answer gets lost and the watch sends it again, the Pi keeps only one copy. */
+    public void uploadRecording(java.io.File wav, String title, String date, String time, boolean ring, String uid) throws IOException, JSONException {
         String v = ping().optString("version", "");                 // an old Pi cannot take uploads: say so clearly
         if (!versionAtLeast(v, 1, 4)) {
             throw new RejectedException("The Pi has an old watch_api.py. Copy the new one to the Pi and restart the reminder app.");
         }
         String q = "/upload?title=" + URLEncoder.encode(title, "UTF-8") + "&date=" + URLEncoder.encode(date == null ? "" : date, "UTF-8")
-                + "&time=" + URLEncoder.encode(date == null || time == null ? "" : time, "UTF-8") + "&ring=" + (ring ? "1" : "0");
+                + "&time=" + URLEncoder.encode(date == null || time == null ? "" : time, "UTF-8") + "&ring=" + (ring ? "1" : "0") + "&uid=" + URLEncoder.encode(uid == null ? "" : uid, "UTF-8");
         HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + ":" + port + q).openConnection();
         current = c;
         try {

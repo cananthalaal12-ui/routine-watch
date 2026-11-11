@@ -35,7 +35,7 @@ public class RecordActivity extends Activity {
     private File wav;
     private WavRecorder recorder;
     private MediaPlayer player;
-    private boolean recording = false, reviewing = false, busy = false, ring = true, backOnce = false;
+    private boolean recording = false, reviewing = false, busy = false, ring = true, backOnce = false, saved = false;
 
     private LinearLayout stage1, stage2;
     private TextView timer, hint, msg, msg2;
@@ -166,7 +166,7 @@ public class RecordActivity extends Activity {
         msg2.setGravity(Gravity.CENTER);
         msg2.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 4));
         stage2.addView(msg2);
-        send = Ui.button(this, "Save on the Pi", Ui.GREEN, new View.OnClickListener() {
+        send = Ui.button(this, "Save", Ui.GREEN, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 upload();
@@ -318,52 +318,61 @@ public class RecordActivity extends Activity {
         if (playBtn != null) playBtn.setText("▶  Listen");
     }
 
-    // ------------------------------------------------------------------ send to the Pi
+    // ------------------------------------------------------------------ keep on the watch, then send to the Pi if it can be reached
     private void upload() {
         if (busy) return;
-        if (!Store.isConfigured(this)) {
-            msg2.setTextColor(Ui.RED);
-            msg2.setText("Not connected to the Pi. Use Setup first.");
-            return;
-        }
         stopPreview();
         final String title = name.getText().toString().trim();
         final String date = dateField.date == null ? null : dateField.date.toString();
         final String time = dateField.date == null ? null : Edits.hm(timeField.time);
-        busy = true;
-        send.setText("Sending ...");
-        msg2.setTextColor(Ui.MUTE);
-        msg2.setText("Sending " + (wav.length() / 1024) + " KB to the Pi ...");
         final Context app = getApplicationContext();
-        final File f = wav;
-        final boolean rg = ring;
+        try {
+            Pending.add(app, wav, title, date, time, ring);                  // first: safe on the watch
+        } catch (java.io.IOException e) {
+            msg2.setTextColor(Ui.RED);
+            msg2.setText("The watch could not keep the recording (is its storage full?).");
+            return;
+        }
+        Alarms.scheduleNext(app);
+        busy = true;
+        saved = true;
+        send.setText("Saved");
+        if (!Store.isConfigured(app)) {
+            Toast.makeText(this, "Saved on the watch. Use Setup to connect to the Pi - it will be sent then.", Toast.LENGTH_LONG).show();
+            setResult(RESULT_OK);
+            finish();
+            return;
+        }
+        msg2.setTextColor(Ui.MUTE);
+        msg2.setText("Saved on the watch. Sending to the Pi ...");
         new Thread(new Runnable() {
             @Override
             public void run() {
-                String err = null;
+                String note;
                 try {
                     PiClient pc = Store.client(app);
-                    pc.uploadRecording(f, title, date, time, rg);
-                    Sync.once(app, pc, 0);
-                } catch (PiClient.RejectedException e) {
-                    err = e.getMessage();
-                } catch (PiClient.AuthException e) {
-                    err = "Wrong code. Use Setup.";
+                    Pending.Result r = Pending.flush(app, pc);
+                    if (r.unreachable || r.wrongCode) {
+                        note = r.wrongCode ? "Saved on the watch. The code is wrong - use Setup. It will be sent after that."
+                                : "Saved on the watch. The Pi is not connected - it will be sent when it is.";
+                    } else if (!r.refused.isEmpty()) {
+                        note = "Saved on the watch. The Pi said: " + r.refused;
+                    } else {
+                        try {
+                            Sync.once(app, pc, 0);
+                        } catch (Exception ignored) {
+                        }
+                        note = "Saved. It is on the Pi and on the watch.";
+                    }
                 } catch (Exception e) {
-                    err = "The Pi is not reachable. Your recording is kept here - try again on the home Wi-Fi.";
+                    note = "Saved on the watch. It will be sent to the Pi when it is connected.";
                 }
-                final String e2 = err;
+                final String n = note;
                 ui.post(new Runnable() {
                     @Override
                     public void run() {
-                        busy = false;
-                        if (isFinishing()) return;
-                        send.setText("Save on the Pi");
-                        if (e2 != null) {
-                            msg2.setTextColor(Ui.RED);
-                            msg2.setText(e2);
-                        } else {
-                            Toast.makeText(RecordActivity.this, "Saved on the Pi", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(app, n, Toast.LENGTH_LONG).show();
+                        if (!isFinishing()) {
                             setResult(RESULT_OK);
                             finish();
                         }
@@ -406,6 +415,6 @@ public class RecordActivity extends Activity {
         WavRecorder r = recorder;
         if (r != null && r.isRunning()) r.stop();
         stopPreview();
-        if (isFinishing() && !busy) wav.delete();
+        if (isFinishing() && !saved) wav.delete();
     }
 }

@@ -28,7 +28,9 @@ public final class Alarms {
         AlarmManager am = (AlarmManager) app.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         Data d = Store.load(app);
-        LocalDateTime next = Schedule.nextAlarm(d.items.values(), LocalDateTime.now());
+        java.util.List<Item> all = new java.util.ArrayList<>(d.items.values());
+        all.addAll(Pending.asItems(app));                        // recordings still waiting for the Pi ring too
+        LocalDateTime next = Schedule.nextAlarm(all, LocalDateTime.now());
         if (next == null) {
             am.cancel(pending(app, ACTION_ALARM, 0));
             return;

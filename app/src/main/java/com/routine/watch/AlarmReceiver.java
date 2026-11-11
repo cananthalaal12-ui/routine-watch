@@ -26,7 +26,9 @@ public class AlarmReceiver extends BroadcastReceiver {
             long late = System.currentTimeMillis() - when;
             if (when > 0 && late < 15 * 60 * 1000L) {                 // not for alarms missed while the watch was off
                 LocalDateTime moment = LocalDateTime.ofInstant(Instant.ofEpochMilli(when), ZoneId.systemDefault());
-                List<Item> due = Schedule.dueAt(Store.load(ctx).items.values(), moment);
+                List<Item> all = new ArrayList<>(Store.load(ctx).items.values());
+                all.addAll(Pending.asItems(ctx));
+                List<Item> due = Schedule.dueAt(all, moment);
                 if (!due.isEmpty()) alert(ctx, due);
             }
             Alarms.scheduleNext(ctx);                                  // and set the one after it

@@ -22,6 +22,7 @@ import java.time.LocalTime;
 public class EditRecActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private String id = "";
+    private String lid = "";                              // set when this is a recording still waiting on the watch for the Pi
     private EditText name;
     private Pickers.DateField dateField;
     private Pickers.TimeField timeField;
@@ -34,7 +35,16 @@ public class EditRecActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         id = getIntent().getStringExtra("id") == null ? "" : getIntent().getStringExtra("id");
-        Item it = Store.load(this).items.get("c" + id);
+        lid = getIntent().getStringExtra("lid") == null ? "" : getIntent().getStringExtra("lid");
+        Item it = null;
+        if (!lid.isEmpty()) {
+            Pending.Entry pe = Pending.get(this, lid);
+            if (pe != null) {
+                it = new Item("p" + pe.lid, "c", pe.title, pe.time.isEmpty() ? "00:00" : pe.time, pe.date, "", pe.ring, false, pe.created);
+            }
+        } else {
+            it = Store.load(this).items.get("c" + id);
+        }
         if (it == null) {                                  // it was deleted on the Pi meanwhile
             finish();
             return;
@@ -60,7 +70,10 @@ public class EditRecActivity extends Activity {
         sv.addView(root);
 
         root.addView(Ui.label(this, "Edit recording", 22, Ui.TEXT, true));
-        TextView hint = Ui.label(this, "On its date and time the Pi plays it. No date = only plays when you press Play on the Pi.", 12, Ui.MUTE, false);
+        TextView hint = Ui.label(this, lid.isEmpty()
+                ? "On its date and time the Pi plays it. No date = only plays when you press Play on the Pi."
+                : "WAITING FOR THE PI. It is saved on the watch and goes to the Pi by itself when the Pi is connected. You can change it here until then.",
+                12, lid.isEmpty() ? Ui.MUTE : Ui.AMBER, false);
         hint.setPadding(0, Ui.dp(this, 2), 0, Ui.dp(this, 4));
         root.addView(hint);
 
@@ -156,6 +169,17 @@ public class EditRecActivity extends Activity {
             msg.setText("Type a name for the recording.");
             return;
         }
+        if (!lid.isEmpty()) {                               // still on the watch only: change it here, no Pi needed
+            String d = dateField.date == null ? null : dateField.date.toString();
+            if (!Pending.update(this, lid, t, d, d == null ? null : Edits.hm(timeField.time), ring)) {
+                msg.setText("It is being sent to the Pi right now. Try again in a moment.");
+                return;
+            }
+            Alarms.scheduleNext(getApplicationContext());
+            setResult(RESULT_OK);
+            finish();
+            return;
+        }
         try {
             send(Edits.recSet(id, t, dateField.date, timeField.time, ring));
         } catch (org.json.JSONException e) {
@@ -179,6 +203,16 @@ public class EditRecActivity extends Activity {
                     }
                 }
             }, 4000);
+            return;
+        }
+        if (!lid.isEmpty()) {
+            if (!Pending.delete(this, lid)) {
+                msg.setText("It is being sent to the Pi right now. Try again in a moment.");
+                return;
+            }
+            Alarms.scheduleNext(getApplicationContext());
+            setResult(RESULT_OK);
+            finish();
             return;
         }
         try {
