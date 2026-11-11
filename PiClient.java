@@ -179,6 +179,64 @@ public final class PiClient implements SyncEngine.Net {
         }
     }
 
+    private static boolean versionAtLeast(String v, int major, int minor) {
+        try {
+            String[] p = v.trim().split("\\.");
+            int a = Integer.parseInt(p[0]), b = p.length > 1 ? Integer.parseInt(p[1]) : 0;
+            return a > major || (a == major && b >= minor);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Send a sound the watch recorded (a WAV file) to the Pi, which saves it as a new recording.
+     * date == null = no date (then time is ignored). Throws RejectedException with the Pi's own words if it says no.
+     */
+    public void uploadRecording(java.io.File wav, String title, String date, String time, boolean ring) throws IOException, JSONException {
+        String v = ping().optString("version", "");                 // an old Pi cannot take uploads: say so clearly
+        if (!versionAtLeast(v, 1, 4)) {
+            throw new RejectedException("The Pi has an old watch_api.py. Copy the new one to the Pi and restart the reminder app.");
+        }
+        String q = "/upload?title=" + URLEncoder.encode(title, "UTF-8") + "&date=" + URLEncoder.encode(date == null ? "" : date, "UTF-8")
+                + "&time=" + URLEncoder.encode(date == null || time == null ? "" : time, "UTF-8") + "&ring=" + (ring ? "1" : "0");
+        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + ":" + port + q).openConnection();
+        current = c;
+        try {
+            c.setRequestMethod("POST");
+            c.setConnectTimeout(4000);
+            c.setReadTimeout(60000);
+            c.setUseCaches(false);
+            c.setDoOutput(true);
+            c.setFixedLengthStreamingMode(wav.length());            // streams from the file: nothing big is held in memory
+            c.setRequestProperty("X-Code", code);
+            c.setRequestProperty("Content-Type", "audio/wav");
+            java.io.FileInputStream in = new java.io.FileInputStream(wav);
+            try {
+                java.io.OutputStream out = c.getOutputStream();
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.flush();
+            } finally {
+                in.close();
+            }
+            int status = c.getResponseCode();
+            InputStream rs = status < 400 ? c.getInputStream() : c.getErrorStream();
+            String body = rs == null ? "" : read(rs);
+            String msg = "";
+            try {
+                msg = new JSONObject(body).optString("error", "");
+            } catch (JSONException ignored) {
+            }
+            if (status == 401 || status == 429) throw new AuthException(msg.isEmpty() ? "Wrong code" : msg);
+            if (status != 200) throw new RejectedException(msg.isEmpty() ? "The Pi did not accept the recording (" + status + ")." : msg);
+        } finally {
+            current = null;
+            c.disconnect();
+        }
+    }
+
     /** Shout on the Wi-Fi "is there a Pi?" and collect the answers. */
     public static List<Found> discover(int timeoutMs) {
         try {
