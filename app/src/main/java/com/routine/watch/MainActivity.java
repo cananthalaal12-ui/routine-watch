@@ -271,10 +271,10 @@ public class MainActivity extends Activity {
             list.addView(none);
         }
         List<Item> recs = Schedule.recordings(d.items.values());
-        list.addView(header("RECORDINGS" + (recs.isEmpty() ? "" : "  (" + recs.size() + ")")));
+        list.addView(recHeader(recs.size()));
         for (Item r : recs) list.addView(recRow(r, now));
         if (recs.isEmpty()) {
-            TextView none = Ui.label(this, "No recordings yet. Make them on the Pi.", 14, Ui.MUTE, false);
+            TextView none = Ui.label(this, "No recordings yet. Tap Record to make one.", 14, Ui.MUTE, false);
             none.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), 0, Ui.dp(this, 4));
             list.addView(none);
         }
@@ -293,6 +293,25 @@ public class MainActivity extends Activity {
         TextView t = Ui.label(this, s, 11, Ui.MUTE, true);
         t.setPadding(Ui.dp(this, 2), Ui.dp(this, 12), 0, Ui.dp(this, 4));
         return t;
+    }
+
+    /** "RECORDINGS (3) ........ Record" - the red button records a new voice note on the watch. */
+    private View recHeader(int count) {
+        LinearLayout h = new LinearLayout(this);
+        h.setOrientation(LinearLayout.HORIZONTAL);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        h.setPadding(Ui.dp(this, 2), Ui.dp(this, 12), 0, Ui.dp(this, 4));
+        TextView t = Ui.label(this, "RECORDINGS" + (count == 0 ? "" : "  (" + count + ")") + "  -  tap = play", 11, Ui.MUTE, true);
+        h.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        Button rec = Ui.button(this, "\u25CF Record", Ui.RED, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, RecordActivity.class));
+            }
+        });
+        rec.setTextSize(13);
+        h.addView(rec, new LinearLayout.LayoutParams(-2, Ui.dp(this, 40)));
+        return h;
     }
 
     /** "TODAY ........ + Add" */
